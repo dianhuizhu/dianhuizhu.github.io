@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+
+<title>Practical Machine Learning Course Project </title>
+
+<script type="text/javascript">
+window.onload = function() {
+  var imgs = document.getElementsByTagName('img'), i, img;
+  for (i = 0; i < imgs.length; i++) {
+    img = imgs[i];
+    // center an image if it is the only element of its parent
+    if (img.parentElement.childElementCount === 1)
+      img.parentElement.style.textAlign = 'center';
+  }
+};
+</script>
+
+
+
+
+
+<style type="text/css">
+body, td {
+   font-family: sans-serif;
+   background-color: white;
+   font-size: 13px;
+}
+
+body {
+  max-width: 800px;
+  margin: auto;
+  padding: 1em;
+  line-height: 20px;
+}
+
+tt, code, pre {
+   font-family: 'DejaVu Sans Mono', 'Droid Sans Mono', 'Lucida Console', Consolas, Monaco, monospace;
+}
+
+h1 {
+   font-size:2.2em;
+}
+
+h2 {
+   font-size:1.8em;
+}
+
+h3 {
+   font-size:1.4em;
+}
+
+h4 {
+   font-size:1.0em;
+}
+
+h5 {
+   font-size:0.9em;
+}
+
+h6 {
+   font-size:0.8em;
+}
+
+a:visited {
+   color: rgb(50%, 0%, 50%);
+}
+
+pre, img {
+  max-width: 100%;
+}
+pre {
+  overflow-x: auto;
+}
+pre code {
+   display: block; padding: 0.5em;
+}
+
+code {
+  font-size: 92%;
+  border: 1px solid #ccc;
+}
+
+code[class] {
+  background-color: #F8F8F8;
+}
+
+table, td, th {
+  border: none;
+}
+
+blockquote {
+   color:#666666;
+   margin:0;
+   padding-left: 1em;
+   border-left: 0.5em #EEE solid;
+}
+
+hr {
+   height: 0px;
+   border-bottom: none;
+   border-top-width: thin;
+   border-top-style: dotted;
+   border-top-color: #999999;
+}
+
+@media print {
+   * {
+      background: transparent !important;
+      color: black !important;
+      filter:none !important;
+      -ms-filter: none !important;
+   }
+
+   body {
+      font-size:12pt;
+      max-width:100%;
+   }
+
+   a, a:visited {
+      text-decoration: underline;
+   }
+
+   hr {
+      visibility: hidden;
+      page-break-before: always;
+   }
+
+   pre, blockquote {
+      padding-right: 1em;
+      page-break-inside: avoid;
+   }
+
+   tr, img {
+      page-break-inside: avoid;
+   }
+
+   img {
+      max-width: 100% !important;
+   }
+
+   @page :left {
+      margin: 15mm 20mm 15mm 10mm;
+   }
+
+   @page :right {
+      margin: 15mm 10mm 15mm 20mm;
+   }
+
+   p, h2, h3 {
+      orphans: 3; widows: 3;
+   }
+
+   h2, h3 {
+      page-break-after: avoid;
+   }
+}
+</style>
+
+
+
+</head>
+
+<body>
+<h1>Practical Machine Learning Course Project </h1>
+
+<h2> Summary</h2>
+
+<p>I don&#39;t quite understand the dataset. There are 160 columns in
+the original dataset. I couldn&#39;t find specifications on these
+columns in the original page at <a href="http://groupware.les.inf.puc-rio.br/har">
+<a href="http://groupware.les.inf.puc-rio.br/har">http://groupware.les.inf.puc-rio.br/har</a></a>. Instead of trying
+to understand the dataset, I decided to focus on the methods
+that I learned from the class.
+<P>
+Here are the steps to pre-process the data and run the predict model on the final test set:</p>
+
+<ol>
+<li> Data cleanup: remove all columns with NA more than 80%; Remove all non-numeric variables; Remove unwanted columns from the original dataset </li>
+<li> Data Pre-processing: inpute NAs, check near zero variables and use PCA to remove correlated variables </li>
+<li> Prediction: use a simple Random Forest model. The one with rpart was too slow. The first time I ran the model, I got 18/20 right. After runing the model for 3 times, I got 19/20 right and stopped.</li>
+</ol>
+
+<h2>Details</h2>
+
+<h3>1. Data load and cleanup </h3>
+
+<p>Get all libraries first</p>
+
+<pre><code class="r">library(caret)
+</code></pre>
+
+<pre><code>## Loading required package: lattice
+## Loading required package: ggplot2
+</code></pre>
+
+<pre><code class="r">library(kernlab)
+library(randomForest)
+</code></pre>
+
+<pre><code>## randomForest 4.6-10
+## Type rfNews() to see new features/changes/bug fixes.
+</code></pre>
+
+<p>Load the training data, remove all columns with NAs more than 80%, remove all non-numeric columns, remove unwanted columns <BR></p>
+
+<pre><code class="r">data &lt;- read.csv(&quot;data/pml-training.csv&quot;, header=TRUE)
+data &lt;- data[,colSums(is.na(data))&lt;(nrow(data)*0.8)]
+
+# keep classe column and it&#39;s name, will append 
+# it to the pre-processed data
+classe&lt;- data$classe;
+names(classe)&lt;- &quot;classe&quot;
+
+data &lt;- data[, sapply(data, is.numeric)]
+#Add classe back to the data set
+data &lt;-cbind(data, classe)
+
+#The followings columns might not be useful for prediction, remove them too
+data &lt;-subset(data, select = -c(X, raw_timestamp_part_1,
+              raw_timestamp_part_2, num_window)) 
+
+ncol(data)
+</code></pre>
+
+<pre><code>## [1] 53
+</code></pre>
+
+<p>As it shows above, there are 53 columns left after data cleaning<BR></p>
+
+<h3> 2. Data pre-processing </h3>
+
+<p>Inpute all NAs in the dataset first</p>
+
+<pre><code class="r">preObj &lt;- preProcess(data[, -c(53)], method =&quot;knnImpute&quot;)
+</code></pre>
+
+<p>The following command shows that there are no near zero variables</p>
+
+<pre><code class="r">nearZeroVar(data, saveMetrics=TRUE)
+</code></pre>
+
+<pre><code>##                      freqRatio percentUnique zeroVar   nzv
+## roll_belt             1.101904     6.7781062   FALSE FALSE
+## pitch_belt            1.036082     9.3772296   FALSE FALSE
+## yaw_belt              1.058480     9.9734991   FALSE FALSE
+## total_accel_belt      1.063160     0.1477933   FALSE FALSE
+## gyros_belt_x          1.058651     0.7134849   FALSE FALSE
+## gyros_belt_y          1.144000     0.3516461   FALSE FALSE
+## gyros_belt_z          1.066214     0.8612782   FALSE FALSE
+## accel_belt_x          1.055412     0.8357966   FALSE FALSE
+## accel_belt_y          1.113725     0.7287738   FALSE FALSE
+## accel_belt_z          1.078767     1.5237998   FALSE FALSE
+## magnet_belt_x         1.090141     1.6664968   FALSE FALSE
+## magnet_belt_y         1.099688     1.5187035   FALSE FALSE
+## magnet_belt_z         1.006369     2.3290184   FALSE FALSE
+## roll_arm             52.338462    13.5256345   FALSE FALSE
+## pitch_arm            87.256410    15.7323412   FALSE FALSE
+## yaw_arm              33.029126    14.6570176   FALSE FALSE
+## total_accel_arm       1.024526     0.3363572   FALSE FALSE
+## gyros_arm_x           1.015504     3.2769341   FALSE FALSE
+## gyros_arm_y           1.454369     1.9162165   FALSE FALSE
+## gyros_arm_z           1.110687     1.2638875   FALSE FALSE
+## accel_arm_x           1.017341     3.9598410   FALSE FALSE
+## accel_arm_y           1.140187     2.7367241   FALSE FALSE
+## accel_arm_z           1.128000     4.0362858   FALSE FALSE
+## magnet_arm_x          1.000000     6.8239731   FALSE FALSE
+## magnet_arm_y          1.056818     4.4439914   FALSE FALSE
+## magnet_arm_z          1.036364     6.4468454   FALSE FALSE
+## roll_dumbbell         1.022388    84.2065029   FALSE FALSE
+## pitch_dumbbell        2.277372    81.7449801   FALSE FALSE
+## yaw_dumbbell          1.132231    83.4828254   FALSE FALSE
+## total_accel_dumbbell  1.072634     0.2191418   FALSE FALSE
+## gyros_dumbbell_x      1.003268     1.2282132   FALSE FALSE
+## gyros_dumbbell_y      1.264957     1.4167771   FALSE FALSE
+## gyros_dumbbell_z      1.060100     1.0498420   FALSE FALSE
+## accel_dumbbell_x      1.018018     2.1659362   FALSE FALSE
+## accel_dumbbell_y      1.053061     2.3748853   FALSE FALSE
+## accel_dumbbell_z      1.133333     2.0894914   FALSE FALSE
+## magnet_dumbbell_x     1.098266     5.7486495   FALSE FALSE
+## magnet_dumbbell_y     1.197740     4.3012945   FALSE FALSE
+## magnet_dumbbell_z     1.020833     3.4451126   FALSE FALSE
+## roll_forearm         11.589286    11.0895933   FALSE FALSE
+## pitch_forearm        65.983051    14.8557741   FALSE FALSE
+## yaw_forearm          15.322835    10.1467740   FALSE FALSE
+## total_accel_forearm   1.128928     0.3567424   FALSE FALSE
+## gyros_forearm_x       1.059273     1.5187035   FALSE FALSE
+## gyros_forearm_y       1.036554     3.7763735   FALSE FALSE
+## gyros_forearm_z       1.122917     1.5645704   FALSE FALSE
+## accel_forearm_x       1.126437     4.0464784   FALSE FALSE
+## accel_forearm_y       1.059406     5.1116094   FALSE FALSE
+## accel_forearm_z       1.006250     2.9558659   FALSE FALSE
+## magnet_forearm_x      1.012346     7.7667924   FALSE FALSE
+## magnet_forearm_y      1.246914     9.5403119   FALSE FALSE
+## magnet_forearm_z      1.000000     8.5771073   FALSE FALSE
+## classe                1.469581     0.0254816   FALSE FALSE
+</code></pre>
+
+<p>Find correlated variables, use threshold .95</p>
+
+<pre><code class="r">M &lt;- abs(cor(data[, -c(53)]))
+diag(M) &lt;- 0
+which(M &gt; 0.95, arr.ind=T)
+</code></pre>
+
+<pre><code>##                  row col
+## total_accel_belt   4   1
+## accel_belt_z      10   1
+## accel_belt_x       8   2
+## roll_belt          1   4
+## accel_belt_z      10   4
+## pitch_belt         2   8
+## roll_belt          1  10
+## total_accel_belt   4  10
+## gyros_dumbbell_z  33  31
+## gyros_dumbbell_x  31  33
+</code></pre>
+
+<p>There are 5 pairs that are correlated. Use PCA to remove correlated variables</p>
+
+<pre><code class="r">preProc &lt;- preProcess(data[, -53], thresh=0.95, method=&#39;pca&#39;)
+</code></pre>
+
+<p>Create data partition for training and testing</p>
+
+<pre><code class="r">inTrain &lt;- createDataPartition(y=data$classe, p=0.75, list=FALSE)
+training &lt;-data[inTrain, ]
+testing &lt;-data[-inTrain, ]
+</code></pre>
+
+<p>Get the new data sets for training and testing after PCA </p>
+
+<pre><code class="r">trainPC &lt;- predict(preProc, training[, -53])
+testPC &lt;- predict(preProc, testing[, -53])
+</code></pre>
+
+<p>The following line shows the PCA generates 25 principal components</p>
+
+<pre><code class="r">ncol(trainPC)
+</code></pre>
+
+<pre><code>## [1] 25
+</code></pre>
+
+<h3> 3. Run random forest model from randomForest package </h3>
+
+<p>It is very slow to run modFit =train(training$classe, method=&#39;rf&#39;, data=trainPC). I decided to run a simple random forest model from package randomForest. It is much faster and the prediction result is promising</p>
+
+<pre><code class="r">modFit &lt;- randomForest(training$classe ~. , data=trainPC)
+testPredict &lt;- predict(modFit, testPC);
+confusionMatrix(testing$classe, testPredict)
+</code></pre>
+
+<pre><code>## Confusion Matrix and Statistics
+## 
+##           Reference
+## Prediction    A    B    C    D    E
+##          A 1381    2   11    0    1
+##          B   11  929    8    0    1
+##          C    2    9  832    9    3
+##          D    0    1   37  764    2
+##          E    0    3    6    5  887
+## 
+## Overall Statistics
+##                                           
+##                Accuracy : 0.9774          
+##                  95% CI : (0.9728, 0.9813)
+##     No Information Rate : 0.2843          
+##     P-Value [Acc &gt; NIR] : &lt; 2.2e-16       
+##                                           
+##                   Kappa : 0.9714          
+##  Mcnemar&#39;s Test P-Value : NA              
+## 
+## Statistics by Class:
+## 
+##                      Class: A Class: B Class: C Class: D Class: E
+## Sensitivity            0.9907   0.9841   0.9306   0.9820   0.9922
+## Specificity            0.9960   0.9949   0.9943   0.9903   0.9965
+## Pos Pred Value         0.9900   0.9789   0.9731   0.9502   0.9845
+## Neg Pred Value         0.9963   0.9962   0.9847   0.9966   0.9983
+## Prevalence             0.2843   0.1925   0.1823   0.1586   0.1823
+## Detection Rate         0.2816   0.1894   0.1697   0.1558   0.1809
+## Detection Prevalence   0.2845   0.1935   0.1743   0.1639   0.1837
+## Balanced Accuracy      0.9933   0.9895   0.9625   0.9862   0.9943
+</code></pre>
+
+<p>The accuray for the test dataset is 0.97. I decided to do the prediction for the final test dataset.</p>
+
+<h3> 4. Prediction on the final test dataset with 20 data points </h3>
+
+<p>Load the test data set, extract the same columns that are used for training and apply the same PCA to get the dataset for prediction</p>
+
+<pre><code class="r">finalTest &lt;- read.csv(&quot;data/pml-testing.csv&quot;, header=TRUE)
+testData &lt;- finalTest[, sapply(finalTest, is.numeric)]
+testData1 &lt;- testData[, names(data)[-53]]
+testPC &lt;- predict(preProc, testData1)
+finalPredict &lt;- predict(modFit, testPC)
+#finalPredict
+</code></pre>
+
+<p>I commented out the output for the prediction here. I got 19/20 prediction right with three runs. The first prediction got 18/20 right. The ones That I missed in the first predicition were for IDs 3 and 11. I got the same result fot those two in the second run. When I ran the model the third time, I got an different answer for 11 and it was correct. So, I got 19/20 predictions correct and I decided not to test my luck after that.</p>
+
+</body>
+
+</html>
